@@ -2,11 +2,7 @@ import logging
 import voluptuous as vol
 from datetime import timedelta
 
-# Prefer vendored lib during dev. Fall back to PyPI if not present
-try:
-    from .vendor.python_libratone_zipp.python_libratone_zipp import LibratoneZipp  # type: ignore
-except Exception:  # pragma: no cover
-    from python_libratone_zipp import LibratoneZipp  # type: ignore
+from .client import LibratoneZipp
 
 from homeassistant.components.media_player import PLATFORM_SCHEMA, MediaPlayerEntity
 from homeassistant.core import HomeAssistant
@@ -199,7 +195,7 @@ class LibratoneZippDevice(MediaPlayerEntity):
     @property
     def unique_id(self):
         """Stable id for registry: one entity per IP/host."""
-        host = getattr(self.zipp, "host", None)
+        host = getattr(self.zipp, "configured_host", self.zipp.host)
         if not host:
             return None
         # normalize IPv4/IPv6 for registry safety

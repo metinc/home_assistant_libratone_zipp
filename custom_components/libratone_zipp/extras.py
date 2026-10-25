@@ -15,11 +15,7 @@ import re
 import threading
 import time
 
-# Prefer vendored lib during dev. Fall back to PyPI if not present
-try:
-    from .vendor.python_libratone_zipp.python_libratone_zipp import LibratoneZipp  # type: ignore
-except Exception:  # pragma: no cover
-    from python_libratone_zipp import LibratoneZipp  # type: ignore
+from .client import LibratoneZipp
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -18,8 +18,10 @@ def host_tag(host: str) -> str:
 
 
 def device_info(zipp, name: str) -> DeviceInfo:
+    # Transport uses the resolved IP; registry identifiers keep the configured host.
+    host = getattr(zipp, "configured_host", zipp.host)
     return DeviceInfo(
-        identifiers={(DOMAIN, host_tag(zipp.host))},
+        identifiers={(DOMAIN, host_tag(host))},
         name=name,
         manufacturer="Libratone",
         model="Zipp",
@@ -37,7 +39,8 @@ class LibratoneZippEntity(Entity):
     def __init__(self, zipp, device_name: str) -> None:
         self._zipp = zipp
         self._device_name = device_name
-        self._attr_unique_id = f"libratone_{host_tag(zipp.host)}_{self._key}"
+        host = getattr(zipp, "configured_host", zipp.host)
+        self._attr_unique_id = f"libratone_{host_tag(host)}_{self._key}"
         self._attr_device_info = device_info(zipp, device_name)
 
     async def _run(self, func, *args):

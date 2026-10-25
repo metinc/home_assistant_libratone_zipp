@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
 
 from homeassistant.const import EVENT_HOMEASSISTANT_STOP, CONF_HOST, CONF_NAME
@@ -11,7 +12,7 @@ from .const import DOMAIN, PLATFORMS
 
 from .extras import ZippExtended
 
-__version__ = "4.2.0"
+__version__ = "4.2.1"
 TARGET_CONFIG_ENTRY_VERSION = 2  # bump this when we change unique_id format
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -25,7 +26,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             pass
         return z
 
-    zipp = await hass.async_add_executor_job(_mk)
+    try:
+        zipp = await hass.async_add_executor_job(_mk)
+    except OSError as err:
+        raise ConfigEntryNotReady(f"Cannot connect to Libratone speaker {host}: {err}") from err
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = zipp
 
     def _on_stop(_event):

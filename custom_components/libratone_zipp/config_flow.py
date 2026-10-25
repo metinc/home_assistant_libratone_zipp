@@ -7,11 +7,7 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.const import CONF_HOST, CONF_NAME
 from .const import DOMAIN
 
-# Prefer vendored lib during dev. Fall back to PyPI if not present
-try:
-    from .vendor.python_libratone_zipp.python_libratone_zipp import LibratoneZipp  # type: ignore
-except Exception:  # pragma: no cover
-    from python_libratone_zipp import LibratoneZipp  # type: ignore
+from .client import LibratoneZipp
 
 STEP_USER_SCHEMA = vol.Schema({
     vol.Required(CONF_HOST): str,

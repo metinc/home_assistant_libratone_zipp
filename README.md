@@ -23,10 +23,15 @@ models may behave differently.
 1. Click *Install*
 1. Restart Home Assistant
 1. Go to _Settings_ → _Devices & services_ → _Add integration_ and search for **Libratone Zipp**
-1. Add the IP of the speaker and a name
+1. Add the hostname or IPv4 address of the speaker and a name
 1. Repeat the last step if you have multiple speakers
 
 Note: if you're using Docker/devcontainer, you need to forward `3333/udp` and `7778/udp`.
+
+Hostnames are resolved to IPv4 before connecting, so status replies can be matched to the speaker.
+The configured hostname is kept for device and entity identifiers and resolved again whenever the
+integration is loaded. Existing hostname-based entries do not need to be recreated after updating;
+restart Home Assistant to use the fix. If name resolution temporarily fails, Home Assistant retries setup.
 
 ## Features
 
