@@ -1,0 +1,40 @@
+set_favorite:
+  name: Set favorite
+  description: >-
+    Store a radio station in one of the speaker's five preset slots. Use the
+    vTuner station id (the same id the speaker already shows as
+    channel_identity for its current presets).
+  target:
+    entity:
+      integration: libratone_zipp
+      domain: media_player
+  fields:
+    favorite:
+      name: Favorite
+      description: Preset slot to overwrite (1-5).
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 5
+          mode: box
+    station_id:
+      name: Station id
+      description: vTuner station id.
+      required: true
+      example: "77320"
+      selector:
+        text:
+    name:
+      name: Name
+      description: Name shown for the preset. Defaults to "Station <id>".
+      example: "Klassik Radio Classic Dreams"
+      selector:
+        text:
+    channel_type:
+      name: Type
+      description: Service of the station. The speaker reports vtuner, audiogum, spotify, ...
+      default: vtuner
+      selector:
+        text:

@@ -9,20 +9,16 @@ from homeassistant.const import EVENT_HOMEASSISTANT_STOP, CONF_HOST, CONF_NAME
 from .const import DOMAIN, PLATFORMS
 
 
-# Prefer vendored lib during dev. Fall back to PyPI if not present
-try:
-    from .vendor.python_libratone_zipp.python_libratone_zipp import LibratoneZipp  # type: ignore
-except Exception:  # pragma: no cover
-    from python_libratone_zipp import LibratoneZipp  # type: ignore
+from .extras import ZippExtended
 
-__version__ = "4.1.0"
+__version__ = "4.2.0"
 TARGET_CONFIG_ENTRY_VERSION = 2  # bump this when we change unique_id format
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     host = entry.data[CONF_HOST]
 
     def _mk():
-        z = LibratoneZipp(host)
+        z = ZippExtended(host)
         try:
             z.name_get(); z.version_get(); z.volume_get()
         except Exception:

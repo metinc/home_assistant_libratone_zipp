@@ -13,12 +13,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
+from .entity import device_info
 from homeassistant.const import CONF_NAME
 
 
 from homeassistant.components.media_player.const import (
     MediaType,
     MediaPlayerEntityFeature,
+    RepeatMode,
 )
 from homeassistant.const import (
     CONF_HOST,
@@ -32,6 +34,7 @@ from homeassistant.const import (
 )
 
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers import entity_platform
 
 DEFAULT_NAME = "Libratone Zipp"
 DEVICE_CLASS_SPEAKER = "speaker"
@@ -72,7 +75,19 @@ async def async_setup_entry(
     """Set up from a config entry."""
     zipp_client = hass.data[DOMAIN][entry.entry_id]
     name = entry.title or entry.data.get(CONF_NAME) or DEFAULT_NAME
-    async_add_entities([LibratoneZippDevice(zipp_client, name)])
+    async_add_entities([LibratoneZippDevice(zipp_client, name, has_device=True)])
+
+    platform = entity_platform.async_get_current_platform()
+    platform.async_register_entity_service(
+        "set_favorite",
+        {
+            vol.Required("favorite"): vol.All(vol.Coerce(int), vol.Range(min=1, max=5)),
+            vol.Required("station_id"): cv.string,
+            vol.Optional("name"): cv.string,
+            vol.Optional("channel_type", default="vtuner"): cv.string,
+        },
+        "async_set_favorite",
+    )
 
 def setup_platform(hass, config, add_entities, discover_info=None):
     """Set up Libratone Zipp"""
@@ -105,10 +120,14 @@ def setup_platform(hass, config, add_entities, discover_info=None):
 class LibratoneZippDevice(MediaPlayerEntity):
     """Representation of a Libratone Zipp speaker."""
 
-    def __init__(self, zipp_client, name):
+    def __init__(self, zipp_client, name, has_device=False):
         """Initialize a new Libratone Zipp device"""
         self.zipp = zipp_client
         self._name = name
+        # Created from a config entry: the entity is the main entity of its device, so HA names
+        # it after the device ("Zipp2") instead of prefixing the device name to the speaker name.
+        self._has_device = has_device
+        self._device_name = name  # fixed name for the device registry (self._name follows the speaker)
 
         self._device_type = DEVICE_CLASS_SPEAKER
 
@@ -189,9 +208,13 @@ class LibratoneZippDevice(MediaPlayerEntity):
 
 
     @property
+    def has_entity_name(self):
+        return self._has_device
+
+    @property
     def name(self):
         """Return the name of the device."""
-        return self._name
+        return None if self._has_device else self._name
 
     @property
     def state(self):
@@ -204,9 +227,29 @@ class LibratoneZippDevice(MediaPlayerEntity):
         return self._volume_level
 
     @property
+    def device_info(self):
+        """Group this entity with the sensors/numbers/switches of the same speaker."""
+        if not getattr(self.zipp, "host", None):
+            return None
+        return device_info(self.zipp, self._device_name)
+
+    @property
     def supported_features(self):
         """Flag media player features that are supported."""
-        return SUPPORT_LIBRATONE_ZIPP | MediaPlayerEntityFeature.GROUPING
+        features = SUPPORT_LIBRATONE_ZIPP | MediaPlayerEntityFeature.GROUPING
+        if hasattr(self.zipp, "mute"):  # ZippExtended; the plain library cannot mute
+            features |= MediaPlayerEntityFeature.VOLUME_MUTE
+        if getattr(self.zipp, "supports_play_mode", False):  # the active source accepts shuffle / repeat
+            features |= MediaPlayerEntityFeature.SHUFFLE_SET | MediaPlayerEntityFeature.REPEAT_SET
+        return features
+
+    @property
+    def is_volume_muted(self):
+        return getattr(self.zipp, "is_muted", None)
+
+    def mute_volume(self, mute):
+        """Mute or unmute the speaker."""
+        return self.zipp.mute() if mute else self.zipp.unmute()
 
     @property
     def media_content_type(self):
@@ -221,9 +264,33 @@ class LibratoneZippDevice(MediaPlayerEntity):
     '''
 
     @property
+    def source(self):
+        """Active preset station while a preset plays; otherwise the kind of source (airplay, bluetooth, ...)."""
+        source_type = getattr(self.zipp, "source_type", None)
+        if source_type == "preset":
+            return self.zipp.favorite_name(getattr(self.zipp, "play_identity", None)) or source_type
+        return None if source_type in (None, "none") else source_type
+
+    @property
+    def shuffle(self):
+        return getattr(self.zipp, "shuffle", None)
+
+    @property
+    def repeat(self):
+        repeat = getattr(self.zipp, "repeat", None)
+        return None if repeat is None else {"off": RepeatMode.OFF, "one": RepeatMode.ONE, "all": RepeatMode.ALL}[repeat]
+
+    def set_shuffle(self, shuffle):
+        return self.zipp.play_mode_set(shuffle, getattr(self.zipp, "repeat", None) or "off")
+
+    def set_repeat(self, repeat):
+        return self.zipp.play_mode_set(bool(getattr(self.zipp, "shuffle", None)), RepeatMode(repeat).value)
+
+    @property
     def source_list(self):
-        """List of available input sources."""
-        return self._source_list
+        """Station names of the presets (slot numbers until the speaker has reported them)."""
+        names = [c.get("channel_name") for c in getattr(self.zipp, "favorites", [])]
+        return [n for n in names if n] or self._source_list
 
     @property
     def sound_mode(self):
@@ -294,8 +361,15 @@ class LibratoneZippDevice(MediaPlayerEntity):
         return self.zipp.prev()
 
     def select_source(self, source):
-        """Select input source."""
-        return self.zipp.favorite_play(source)
+        """Select a preset by station name or by slot number ("1".."5")."""
+        slot = getattr(self.zipp, "favorite_slot_by_name", lambda _name: None)(source)
+        return self.zipp.favorite_play(str(slot) if slot is not None else source)
+
+    async def async_set_favorite(self, favorite, station_id, name=None, channel_type="vtuner"):
+        """Service libratone_zipp.set_favorite: store a station in preset `favorite` (1-5)."""
+        await self.hass.async_add_executor_job(
+            self.zipp.favorite_set, favorite, station_id, name or f"Station {station_id}", channel_type
+        )
 
     def select_sound_mode(self, sound_mode):
         """ "Select sound mode."""
